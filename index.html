@@ -495,7 +495,16 @@ body{display:block;}
     login:async email=>{ const {error}=await sb.auth.signInWithOtp({email,options:{emailRedirectTo:location.origin+location.pathname}}); if(error) throw error; },
     logout:async()=>{ await sb.auth.signOut(); location.reload(); }
   };
-  sb.auth.onAuthStateChange(()=>{ refreshOwner().then(()=>window.dispatchEvent(new Event('erb-auth'))); });
+  sb.auth.onAuthStateChange((evt)=>{ refreshOwner().then(()=>{
+    window.dispatchEvent(new Event('erb-auth'));
+    if(evt==='SIGNED_IN'||evt==='INITIAL_SESSION'||evt==='SIGNED_OUT'){
+      try{ if(/[#&](access_token|refresh_token|error|error_description|type)=/.test(location.hash)) history.replaceState(null,'',location.pathname+location.search+'#dashboard'); }catch(e){}
+      if(typeof window.initUser==='function') window.initUser();
+    }
+  }); });
+  const ah=location.hash||'';
+  if(/[#&]error/.test(ah)){ const m=decodeURIComponent((ah.match(/error_description=([^&]*)/)||[])[1]||'').replace(/\+/g,' ');
+    setTimeout(()=>alert('O link de acesso nao funcionou'+(m?': '+m:'. Ele pode ter expirado. Peca um novo.')),800); }
   window.claude={ use:async name=> name==='db'?db : name==='user'?{isOwner:async()=>{await refreshOwner();return owner;}} : null };
 })();
 
@@ -1879,7 +1888,9 @@ Object.entries(VIEW_TITLES).forEach(([fn,[vid,a,b]])=>{
 
 buildNav();
 initChrome();
-goto(((typeof location!=='undefined'&&location.hash)||'').slice(1)||'dashboard');
+window.initUser=initUser;
+const _h=((typeof location!=='undefined'&&location.hash)||'').slice(1);
+goto(/^[a-z]+$/.test(_h)?_h:'dashboard');
 initDB();
 initUser();
 </script>
