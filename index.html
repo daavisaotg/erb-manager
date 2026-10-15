@@ -449,7 +449,9 @@ body{display:block;}
 /* ERB Manager — camada Supabase (substitui claude.use('db'/'user')) */
 (function(){
   const SB_URL='https://ixnlzwpqyddpodqzvmol.supabase.co', SB_KEY='sb_publishable_dBD9HGaPMBe8Cf_0_7xZsg_cdAyzkAr';
-  const sb=window.supabase.createClient(SB_URL,SB_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+  const _AH=(typeof location!=='undefined'&&location.hash)?location.hash.replace(/^#/,''):'';
+  const _AQ=(typeof location!=='undefined'&&location.search)?location.search.replace(/^\?/,''):'';
+  const sb=window.supabase.createClient(SB_URL,SB_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false}});
   window._sb=sb;
   const rid=()=>{const c='abcdefghijklmnopqrstuvwxyz0123456789';let s='';for(let i=0;i<20;i++)s+=c[Math.floor(Math.random()*c.length)];return s;};
   const snapOf=rows=>({docs:rows.map(r=>({id:r.id,data:()=>r.data})),exists:rows.length>0});
@@ -504,9 +506,19 @@ body{display:block;}
       if(typeof window.initUser==='function') window.initUser();
     }
   }); });
-  const ah=location.hash||'';
-  if(/[#&]error/.test(ah)){ const m=decodeURIComponent((ah.match(/error_description=([^&]*)/)||[])[1]||'').replace(/\+/g,' ');
-    setTimeout(()=>alert('O link de acesso nao funcionou'+(m?': '+m:'. Ele pode ter expirado. Peca um novo.')),800); }
+  const _kick=()=>{ if(typeof window.initUser==='function') window.initUser(); else setTimeout(_kick,150); };
+  (async()=>{
+    const hp=new URLSearchParams(_AH), qp=new URLSearchParams(_AQ);
+    const at=hp.get('access_token'), rt=hp.get('refresh_token'), code=qp.get('code');
+    const er=hp.get('error_description')||hp.get('error')||qp.get('error_description')||qp.get('error');
+    try{
+      if(at&&rt){ const {error}=await sb.auth.setSession({access_token:at,refresh_token:rt}); if(error) throw error; _kick(); }
+      else if(code){ const {error}=await sb.auth.exchangeCodeForSession(code); if(error) throw error; _kick(); }
+      else if(er){ setTimeout(()=>alert('O link de acesso nao funcionou: '+decodeURIComponent(er).replace(/\+/g,' ')+'\n\nPeca um link novo, ou entre com a senha.'),900); }
+      else { _kick(); }
+    }catch(e){ setTimeout(()=>alert('Nao foi possivel entrar pelo link: '+(e.message||e)+'\n\nTente entrar com a senha.'),900); }
+    try{ if(code) history.replaceState(null,'',location.pathname+location.hash); }catch(e){}
+  })();
   window.claude={ use:async name=> name==='db'?db : name==='user'?{isOwner:async()=>{await refreshOwner();return owner;}} : null };
 })();
 
