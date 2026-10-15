@@ -493,6 +493,8 @@ body{display:block;}
   window.erbAuth={
     email:async()=>{ const {data:{session}}=await sb.auth.getSession(); return session&&session.user.email; },
     login:async email=>{ const {error}=await sb.auth.signInWithOtp({email,options:{emailRedirectTo:location.origin+location.pathname}}); if(error) throw error; },
+    loginPassword:async(email,password)=>{ const {error}=await sb.auth.signInWithPassword({email,password}); if(error) throw error; },
+    setPassword:async password=>{ const {error}=await sb.auth.updateUser({password}); if(error) throw error; },
     logout:async()=>{ await sb.auth.signOut(); location.reload(); }
   };
   sb.auth.onAuthStateChange((evt)=>{ refreshOwner().then(()=>{
@@ -548,15 +550,57 @@ async function initDB(){
   }, ()=> toast('Erro ao sincronizar escudos'));
   if(userKnown && isOwner) subscribeHistory();
 }
+function authMsg(e){ const m=(e&&(e.message||e))+'';
+  if(/rate limit/i.test(m)) return 'O limite de e-mails foi atingido (2 por hora). Entre com a senha, ou espere cerca de uma hora.';
+  if(/Invalid login credentials/i.test(m)) return 'E-mail ou senha incorretos. Se ainda não criou uma senha, entre pelo link do e-mail e defina uma em Configurações.';
+  return m; }
+function openLogin(){
+  document.getElementById('modalbody').outerHTML = `<div class="modal" id="modalbody">
+    <h3 style="margin:0 0 4px">Entrar como dono</h3>
+    <div class="cs" style="margin-bottom:16px">Use a senha. O link por e-mail é limitado a 2 envios por hora.</div>
+    <label class="cl">E-mail</label>
+    <input id="lg_mail" type="email" placeholder="voce@exemplo.com" style="width:100%;margin:6px 0 12px">
+    <label class="cl">Senha</label>
+    <input id="lg_pass" type="password" placeholder="sua senha" style="width:100%;margin:6px 0 16px"
+      onkeydown="if(event.key==='Enter')doLoginPass()">
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn" onclick="doLoginPass()">Entrar com senha</button>
+      <button class="btn ghost" onclick="doLoginLink()">Enviar link por e-mail</button>
+    </div>
+    <div id="lg_err" style="color:#ff6b6b;font-size:12px;margin-top:12px"></div></div>`;
+  openModal(); setTimeout(()=>document.getElementById('lg_mail').focus(),50);
+}
+function lgErr(t){ const e=document.getElementById('lg_err'); if(e) e.textContent=t; }
+async function doLoginPass(){
+  const em=(document.getElementById('lg_mail').value||'').trim(), pw=document.getElementById('lg_pass').value||'';
+  if(!em||!pw){ lgErr('Preencha o e-mail e a senha.'); return; }
+  lgErr('Entrando...');
+  try{ await erbAuth.loginPassword(em,pw); closeModal(); toast('Bem-vindo de volta'); }
+  catch(e){ lgErr(authMsg(e)); }
+}
+async function doLoginLink(){
+  const em=(document.getElementById('lg_mail').value||'').trim();
+  if(!em){ lgErr('Preencha o e-mail.'); return; }
+  lgErr('Enviando...');
+  try{ await erbAuth.login(em); lgErr(''); closeModal(); alert('Link enviado. Abra o e-mail NESTE mesmo navegador e clique no link.'); }
+  catch(e){ lgErr(authMsg(e)); }
+}
+async function definirSenha(){
+  const p1=prompt('Escolha uma senha (mínimo 8 caracteres). Ela não passa por mais ninguém:');
+  if(!p1) return;
+  if(p1.length<8){ alert('A senha precisa de pelo menos 8 caracteres.'); return; }
+  const p2=prompt('Digite a senha de novo para confirmar:');
+  if(p1!==p2){ alert('As senhas não são iguais. Nada foi alterado.'); return; }
+  try{ await erbAuth.setPassword(p1); alert('Senha definida. A partir de agora você entra com e-mail e senha, sem depender de e-mail.'); }
+  catch(e){ alert('Não foi possível definir: '+authMsg(e)); }
+}
 async function initUser(){
   try{ const u = await claude.use('user'); isOwner = u? await u.isOwner() : false; }catch(e){ isOwner=false; }
   userKnown=true;
   const sf=document.getElementById('sidefoot');
   if(sf){ sf.className='d-role'+(isOwner?'':' ro'); sf.style.cursor='pointer'; sf.title=isOwner?'Clique para sair':'Clique para entrar como dono';
     sf.textContent = isOwner? 'Modo edição · Sair' : 'Somente leitura · Entrar';
-    sf.onclick=async()=>{ if(isOwner){ if(confirm('Sair do modo edição?')) erbAuth.logout(); return; }
-      const em=prompt('E-mail do dono para receber o link de acesso:'); if(!em) return;
-      try{ await erbAuth.login(em.trim()); alert('Link enviado! Abra o e-mail e clique no link para entrar.'); }catch(e){ alert('Não foi possível enviar: '+(e.message||e)); } }; }
+    sf.onclick=()=>{ if(isOwner){ if(confirm('Sair do modo edição?')) erbAuth.logout(); return; } openLogin(); }; }
   buildNav(); markNav();
   if(isOwner && dbc) subscribeHistory();
   if(isOwner && (typeof location!=='undefined') && location.hash==='#historico') goto('historico');
@@ -1808,7 +1852,7 @@ function renderConfig(){
     <div class="cfgrow"><div><div class="cl">Mínimo de partidas para ASSIST em jogo grande</div><div class="cs">Mesma regra, para os assistentes.</div></div><input id="c_bigassist" type="number" min="0" value="${bigMin().assist}" ${dis}></div>
   </div>
   ${isOwner? `<div class="card" style="max-width:520px;margin-top:16px"><div class="cl">Backup dos dados</div><div class="cs" style="margin-bottom:12px">Baixe uma cópia completa (árbitros, escalas, escudos, histórico) ou restaure a partir de um arquivo de backup. Restaurar não apaga nada: só cria ou atualiza.</div>
-    <button class="btn" onclick="exportBackup()">Baixar backup</button> <button class="btn" onclick="document.getElementById('bkfile').click()">Importar backup</button>
+    <button class="btn" onclick="definirSenha()">Definir senha de acesso</button> <button class="btn" onclick="exportBackup()">Baixar backup</button> <button class="btn" onclick="document.getElementById('bkfile').click()">Importar backup</button>
     <input type="file" id="bkfile" accept=".json,application/json" style="display:none" onchange="importBackup(this.files[0]);this.value=''"></div>`:''}
   ${isOwner? '<button class="btn" style="margin-top:16px" onclick="saveConfig()">Salvar e Recalcular Folha</button>' : '<div class="emptystate" style="padding:16px 0"><span class="pill inactive">Somente leitura</span></div>'}`;
 }
