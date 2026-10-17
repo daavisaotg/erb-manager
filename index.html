@@ -196,6 +196,11 @@ tr.is-hof td{background:#341539 !important;}
 .pill.cwc{background:#fff;color:#01081e;}
 .ec-cwc .pill.cwc{background:#01081e;color:#fff;}
 .ec-cwc .pill.gold{background:rgba(138,103,6,.14);}
+.ec-done{background:linear-gradient(155deg,#0d4429 0%,#06240f 100%);border-color:#33d17a;--bg3:#11522f;--line:#1d7044;--muted:#a6e4c3;--muted2:#73bd98;}
+.ec-done .fx-line{opacity:.92;}
+.pill.done{background:#33d17a;color:#01081e;font-weight:800;letter-spacing:.04em;}
+.ec-done .pill.gold,.ec-done .pill.ucl,.ec-done .pill.lib,.ec-done .pill.cwc{background:rgba(255,255,255,.12);color:#d8f5e6;}
+.ec-done .crewrow{opacity:.85;}
 .apt{background:var(--bg3);border:1px solid var(--line);border-left:3px solid var(--primary);border-radius:10px;padding:10px 12px;}
 .apt .al{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;font-weight:700;}
 .apt .at{display:flex;gap:6px;flex-wrap:wrap;}
@@ -1474,6 +1479,7 @@ function teamsHTML(e,size){
 }
 function matchPills(e){
   const d=demandOf(e), out=[];
+  if(e.done) out.push('<span class="pill done">PARTIDA ENCERRADA</span>');
   if(d.comp==='cwc') out.push(`<span class="pill cwc">Club World Cup</span>`);
   else if(d.comp==='ucl') out.push(`<span class="pill ucl">Champions</span>`);
   else if(d.comp==='lib') out.push(`<span class="pill lib">Libertadores</span>`);
@@ -1507,13 +1513,14 @@ function renderEscala(){
   };
   const dayFmt=new Intl.DateTimeFormat('pt-BR',{weekday:'long',day:'2-digit',month:'long',timeZone:'UTC'});
   const groups=[]; rows.forEach(e=>{ let g=groups[groups.length-1]; if(!g||g.d!==e.date){ g={d:e.date,items:[]}; groups.push(g); } g.items.push(e); });
-  const pending=rows.filter(e=>!e.main).length;
-  const card=e=>`<div class="card${demandOf(e).comp?' ec-'+demandOf(e).comp:''}">
+  const pending=rows.filter(e=>!e.main&&!e.done).length;
+  const encerradas=rows.filter(e=>e.done).length;
+  const card=e=>`<div class="card${e.done?' ec-done':(demandOf(e).comp?' ec-'+demandOf(e).comp:'')}">
       <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div style="min-width:0"><div class="fx-line">${teamsHTML(e,26)}</div>
       <div class="fx-meta">${compCrestId(e)?crestHTML(compCrestId(e),e.divCode,16):''}<span>${esc(e.competition||'—')}${e.round?' · '+esc(e.round):''}</span><span>·</span><span class="mono">${e.time?esc(e.time):esc(e.date||'—')}</span></div></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">${matchPills(e)}</div></div>
       <div style="margin-top:12px">${person(e.main,'MAIN',e.date,e)}${[0,1].map(i=>(e.assists||[])[i]||null).filter((a,i)=>a||e.main).map(a=>person(a,'ASSIST',e.date,e)).join('')}</div>
-      ${isOwner? `<div style="margin-top:12px;text-align:right"><button class="btn ghost sm" onclick="openEscalaForm('${e.id}')">Editar</button></div>` : ''}
+      ${isOwner? `<div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap"><button class="btn ghost sm" onclick="toggleEncerrada('${e.id}')">${e.done?'Reabrir partida':'✓ Encerrar partida'}</button><button class="btn ghost sm" onclick="openEscalaForm('${e.id}')">Editar</button></div>` : ''}
     </div>`;
   el.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:12px;flex-wrap:wrap">
@@ -1523,7 +1530,7 @@ function renderEscala(){
     <div class="fx-tools" style="margin:14px 0 16px 0">
       ${rounds.length>1||escRound? `<select style="max-width:170px" onchange="setEscFilter('round',this.value)"><option value="">Todas as rodadas</option>${rounds.map(r=>`<option value="${esc(r)}" ${r===escRound?'selected':''}>${esc(r)}</option>`).join('')}</select>` : ''}
       ${divs.length>1||escDiv? `<select style="max-width:230px" onchange="setEscFilter('div',this.value)"><option value="">Todas as divisões</option>${divs.map(d=>`<option value="${esc(d)}" ${d===escDiv?'selected':''}>${esc(d)}</option>`).join('')}</select>` : ''}
-      <span class="pill inactive">${rows.length} partida${rows.length===1?'':'s'}${pending?' · '+pending+' sem MAIN':''}</span>
+      <span class="pill inactive">${rows.length} partida${rows.length===1?'':'s'}${pending?' · '+pending+' sem MAIN':''}</span>${encerradas?`<span class="pill done">${encerradas} encerrada${encerradas===1?'':'s'}</span>`:''}
       ${isOwner&&pending? `<button class="btn ghost sm" onclick="autoAssignAll(false)">✨ Sugerir escala para as ${pending} sem árbitros</button>` : ''}
       ${isOwner&&rows.length? (escRedoConfirm? `<button class="btn sm" onclick="autoAssignAll(true)">Confirmar: refazer ${rows.length}</button><button class="btn ghost sm" onclick="escRedoConfirm=false;renderEscala()">Cancelar</button>` : `<button class="btn ghost sm" onclick="escRedoConfirm=true;renderEscala()">↻ Refazer sugestão de todas</button>`) : ''}
       ${isOwner&&rows.length&&(escRound||escDiv)? (escDelConfirm? `<button class="btn danger sm" onclick="deleteFiltered()">Confirmar: apagar ${rows.length}</button><button class="btn ghost sm" onclick="escDelConfirm=false;renderEscala()">Cancelar</button>` : `<button class="btn ghost sm" onclick="escDelConfirm=true;renderEscala()">Apagar partidas filtradas</button>`) : ''}
@@ -1682,7 +1689,7 @@ let escRedoConfirm=false;
 async function autoAssignAll(redo){
   if(!isOwner||!dbc) return;
   const all=escFiltered();
-  const rows=redo? all : all.filter(e=>!e.main);
+  const rows=(redo? all : all.filter(e=>!e.main)).filter(e=>!e.done);
   escRedoConfirm=false;
   if(!rows.length) return;
   const items=rows.map(e=>({...e}));
@@ -1690,6 +1697,17 @@ async function autoAssignAll(redo){
   const jobs=items.map(it=>{ const upd={main:it.main||null,assists:it.assists||[]}; if((it.type||'normal')==='normal'){ const d=demandOf(it); if(d.comp||d.region||d.classico) upd.type=autoType(d); } return dbc.collection('escalas').doc(it.id).update(upd); });
   try{ await Promise.all(jobs); logChange('edit','Escala',redo?'Escala refeita':'Sugestão automática',[jobs.length+' partida'+(jobs.length===1?'':'s')+' com escala sugerida'+(incomplete?' ('+incomplete+' incompleta'+(incomplete===1?'':'s')+')':'')]); toast('Escala sugerida para '+jobs.length+' partida'+(jobs.length===1?'':'s')+(incomplete?' · '+incomplete+' incompleta'+(incomplete===1?'':'s'):'')); renderEscala(); }
   catch(e){ toast('Não foi possível sugerir — tente novamente'); }
+}
+async function toggleEncerrada(id){
+  if(!isOwner||!dbc){ toast('Somente o dono pode encerrar partidas'); return; }
+  const e=DB.escalas.find(x=>x.id===id); if(!e) return;
+  const novo=!e.done;
+  if(!novo && !confirm('Reabrir esta partida? Ela volta a entrar na sugestão automática.')) return;
+  try{
+    await dbc.collection('escalas').doc(id).update({done:novo, doneAt:novo?Date.now():null});
+    logChange('edit','Escala',(e.home||'?')+' x '+(e.away||'?'),[novo?'Partida encerrada':'Partida reaberta']);
+    toast(novo?'Partida encerrada':'Partida reaberta');
+  }catch(err){ toast('Não foi possível atualizar a partida'); }
 }
 async function deleteFiltered(){
   if(!isOwner||!dbc) return;
